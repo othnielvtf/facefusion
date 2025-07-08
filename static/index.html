@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceFusion API Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .image-upload {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .upload-section {
+            flex: 1;
+            min-width: 250px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-section:hover {
+            border-color: #3498db;
+        }
+        .upload-section h3 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        .preview-container {
+            width: 100%;
+            height: 200px;
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .preview-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .hidden {
+            display: none;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin: 0 auto;
+            display: block;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .result-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .result-image {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .success {
+            color: #2ecc71;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>FaceFusion API Demo</h1>
+    <div class="container">
+        <div class="image-upload">
+            <div class="upload-section" id="sourceUpload">
+                <h3>Source Face</h3>
+                <p>Upload the face you want to use</p>
+                <input type="file" id="sourceFile" class="hidden" accept="image/*">
+                <div class="preview-container">
+                    <img id="sourcePreview" src="" alt="" style="display: none;">
+                    <p id="sourcePrompt">Click to upload</p>
+                </div>
+            </div>
+            <div class="upload-section" id="targetUpload">
+                <h3>Target Image</h3>
+                <p>Upload the image to swap faces in</p>
+                <input type="file" id="targetFile" class="hidden" accept="image/*">
+                <div class="preview-container">
+                    <img id="targetPreview" src="" alt="" style="display: none;">
+                    <p id="targetPrompt">Click to upload</p>
+                </div>
+            </div>
+        </div>
+        
+        <button id="swapButton" disabled>Swap Face</button>
+        
+        <div class="loading hidden" id="loading">
+            <div class="spinner"></div>
+        </div>
+        
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <div class="result-container hidden" id="resultContainer">
+            <h3>Result</h3>
+            <img id="resultImage" class="result-image" src="" alt="Face swap result">
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const sourceUpload = document.getElementById('sourceUpload');
+            const targetUpload = document.getElementById('targetUpload');
+            const sourceFile = document.getElementById('sourceFile');
+            const targetFile = document.getElementById('targetFile');
+            const sourcePreview = document.getElementById('sourcePreview');
+            const targetPreview = document.getElementById('targetPreview');
+            const sourcePrompt = document.getElementById('sourcePrompt');
+            const targetPrompt = document.getElementById('targetPrompt');
+            const swapButton = document.getElementById('swapButton');
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('errorMessage');
+            const resultContainer = document.getElementById('resultContainer');
+            const resultImage = document.getElementById('resultImage');
+            
+            let sourceData = null;
+            let targetData = null;
+            
+            // Source upload handling
+            sourceUpload.addEventListener('click', () => sourceFile.click());
+            sourceFile.addEventListener('change', handleSourceFileSelect);
+            
+            // Target upload handling
+            targetUpload.addEventListener('click', () => targetFile.click());
+            targetFile.addEventListener('change', handleTargetFileSelect);
+            
+            // Swap button handling
+            swapButton.addEventListener('click', performFaceSwap);
+            
+            function handleSourceFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        sourceData = e.target.result;
+                        sourcePreview.src = sourceData;
+                        sourcePreview.style.display = 'block';
+                        sourcePrompt.style.display = 'none';
+                        checkEnableSwapButton();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            function handleTargetFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        targetData = e.target.result;
+                        targetPreview.src = targetData;
+                        targetPreview.style.display = 'block';
+                        targetPrompt.style.display = 'none';
+                        checkEnableSwapButton();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            function checkEnableSwapButton() {
+                swapButton.disabled = !(sourceData && targetData);
+            }
+            
+            function performFaceSwap() {
+                // Hide previous results and errors
+                resultContainer.classList.add('hidden');
+                errorMessage.classList.add('hidden');
+                
+                // Show loading spinner
+                loading.classList.remove('hidden');
+                
+                // Disable swap button during processing
+                swapButton.disabled = true;
+                
+                // Prepare request data
+                const requestData = {
+                    source_face: sourceData,
+                    target_image: targetData,
+                    options: {
+                        face_selector_mode: 'one'
+                    }
+                };
+                
+                // Make API request
+                fetch('/swap-face', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('hidden');
+                    
+                    if (data.success) {
+                        resultImage.src = data.result_image;
+                        resultContainer.classList.remove('hidden');
+                    } else {
+                        errorMessage.textContent = data.error || 'An error occurred during face swapping';
+                        errorMessage.classList.remove('hidden');
+                    }
+                    
+                    swapButton.disabled = false;
+                })
+                .catch(error => {
+                    loading.classList.add('hidden');
+                    errorMessage.textContent = 'Network error: ' + error.message;
+                    errorMessage.classList.remove('hidden');
+                    swapButton.disabled = false;
+                });
+            }
+        });
+    </script>
+</body>
+</html>
